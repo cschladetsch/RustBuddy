@@ -22,11 +22,12 @@ A local, privacy-first voice assistant for Windows. Control your PC with natural
 ## Quick Start
 
 ```bash
-# In WSL2
+# In WSL2 after cloning this repo
+cd buddy
 rustup target add x86_64-pc-windows-gnu
 cargo build --target x86_64-pc-windows-gnu --release
 
-# Run on Windows
+# Run on Windows (copy the .exe somewhere convenient first)
 ./target/x86_64-pc-windows-gnu/release/buddy.exe
 ```
 
@@ -35,13 +36,13 @@ Press configured hotkey (default: `Ctrl+Alt+B`), speak your command, wait for co
 ## Example Commands
 
 ```
-"Open my details"           → Opens details.md
-"Open Chrome"              → Launches Chrome browser  
+"Open details"             → Opens the file mapped to `details`
+"Launch chrome"            → Launches the app mapped to `chrome`
 "Open my resume"           → Opens resume.docx
-"Shoosh"                   → Mutes volume
-"Volume up"                → Increases volume
-"Sleep"                    → Puts computer to sleep
-"What can you do?"         → Lists available commands
+"Set volume to 25"         → Calls the `volume_set` system action
+"Mute the audio"           → Runs `volume_mute`
+"Go to sleep"              → Puts the PC to sleep
+"Lock the computer"        → Locks the current session
 ```
 
 ## Architecture
@@ -87,6 +88,10 @@ sequenceDiagram
 ## Configuration
 
 ### config.toml
+
+Buddy looks for a config file path passed as the first argument. If you don’t provide
+one it falls back to `config.toml` in the current working directory (keep it next to
+`buddy.exe` for the easiest setup). Start from `buddy/config.example.toml`.
 
 ```toml
 [audio]
@@ -145,16 +150,15 @@ lock = true
 ## Dependencies
 
 ### Core
-- **windows-rs** - Windows Speech Recognition + OS APIs
-- **reqwest** - HTTP client for DeepSeek API
-- **serde** - Config parsing and JSON handling
-- **tokio** - Async runtime
+- **windows** - Win32/WINRT hotkey, speech recognition, and system integration
+- **reqwest** - HTTP client for DeepSeek API calls
+- **serde / serde_json** - Config parsing and intent JSON parsing
+- **tokio** - Async runtime for the hotkey listener + HTTP
 - **toml** - Config file parsing
 
-### System Integration
-- **global-hotkey** - Hotkey registration
-- **tts** - Text-to-speech (Windows SAPI)
-- **rodio** - Audio playback for feedback sounds
+### Audio/Feedback
+- **rodio** - Audio playback for confirmation/error sounds
+- **tts** (Windows only) - Windows SAPI voices for spoken feedback
 
 ## Setup Instructions
 
@@ -193,6 +197,9 @@ curl http://localhost:11434/api/tags
 ### 4. Create Config
 
 ```bash
+# From the repo root
+cd buddy  # skip if already inside
+
 # Copy example config
 cp config.example.toml config.toml
 
@@ -204,6 +211,7 @@ vim config.toml  # or nano, or whatever
 
 ```bash
 # Build for Windows from WSL2
+cd buddy  # ensure we are inside the crate
 cargo build --target x86_64-pc-windows-gnu --release
 
 # Copy to Windows accessible location
@@ -270,13 +278,16 @@ buddy/
 ## Development Workflow
 
 ```bash
+# From repo root
+cd buddy
+
 # Standard dev cycle in WSL2
 cargo check --target x86_64-pc-windows-gnu
 cargo build --target x86_64-pc-windows-gnu
 cargo test --target x86_64-pc-windows-gnu
 
 # Quick test on Windows
-/mnt/c/path/to/buddy.exe --verbose
+/mnt/c/path/to/buddy.exe
 
 # Watch for changes (optional)
 cargo watch -x 'build --target x86_64-pc-windows-gnu'
@@ -336,13 +347,9 @@ ollama list | grep deepseek
 - Check microphone privacy settings and disable "Allow desktop apps to access your microphone" off/on
 
 ### Commands Not Executing
-```bash
-# Run in verbose mode
-buddy.exe --verbose
-
-# Check logs (will be in same directory as exe)
-cat buddy.log
-```
+- Launch `buddy.exe` from a terminal/PowerShell window to watch the stdout/stderr logs.
+- Make sure the DeepSeek response maps to an existing key in `[files]`, `[applications]`, or `[system]`.
+- Re-run with a lower-noise microphone input or tweak `capture_duration_secs` if the command keeps timing out.
 
 ### Cross-Compilation Issues
 ```bash
