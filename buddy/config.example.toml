@@ -1,0 +1,42 @@
+[audio]
+device_name = "Blue Yeti"
+capture_duration_secs = 3
+sample_rate = 16000
+
+[hotkey]
+key = "ctrl+alt+b"
+
+[feedback]
+mode = "tts"
+success_sound = "assets/success.wav"
+error_sound = "assets/error.wav"
+tts_voice = "default"
+
+[deepseek]
+endpoint = "http://localhost:11434/api/chat"
+model = "deepseek-r1:latest"
+timeout_secs = 5
+
+[transcription]
+model_path = "models/vosk-model-small-en-us-0.15"
+
+[files]
+details = "C:/Users/YourName/Documents/details.md"
+resume = "C:/Users/YourName/Documents/resume.docx"
+contacts = "C:/Users/YourName/Documents/contacts.txt"
+
+[applications]
+chrome = "chrome"
+firefox = "firefox"
+vscode = "code"
+terminal = "wt"
+
+[system]
+volume_mute = true
+volume_up = true
+volume_down = true
+volume_set = true
+sleep = true
+shutdown = true
+restart = true
+lock = true
