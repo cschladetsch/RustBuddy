@@ -189,7 +189,13 @@ impl std::fmt::Display for TranscriptionError {
             }
             #[cfg(target_os = "windows")]
             Self::RecognitionStatus(status) => {
-                write!(f, "speech recognition failed: {:?}", status)
+                let hint = match status.0 {
+                    6 => " (Unknown error - check microphone permissions in Windows Settings → Privacy & Security → Microphone, and ensure Speech Recognition is enabled in Settings → Time & Language → Speech)",
+                    4 => " (Audio quality failure - check microphone)",
+                    10 => " (Microphone unavailable)",
+                    _ => "",
+                };
+                write!(f, "speech recognition failed: {:?}{}", status, hint)
             }
             #[cfg(not(target_os = "windows"))]
             Self::Unsupported(msg) => write!(f, "{}", msg),
