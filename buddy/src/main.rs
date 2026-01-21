@@ -116,7 +116,13 @@ async fn run() -> Result<(), BuddyError> {
     );
 
     loop {
+        if debug {
+            println!("Waiting for hotkey...");
+        }
         hotkey.wait().await?;
+        if debug {
+            println!("Hotkey received");
+        }
         println!("Recording audio...");
         let capturer_clone = Arc::clone(&capturer);
         let capture_duration = Duration::from_secs(config.audio.capture_duration_secs);
@@ -131,6 +137,15 @@ async fn run() -> Result<(), BuddyError> {
             continue;
         }
         println!("Heard: {}", transcript);
+        let normalized = transcript
+            .trim()
+            .trim_end_matches(|c: char| c == '.' || c == '!' || c == '?');
+        if normalized.eq_ignore_ascii_case("help") {
+            let help = "Say: open <file>, launch <app>, set volume, mute, lock, sleep, or ask a question.";
+            println!("Help: {}", help);
+            feedback.say(help);
+            continue;
+        }
 
         let intent = match intent_client.infer_intent(&transcript, &config).await {
             Ok(intent) => intent,
@@ -141,6 +156,9 @@ async fn run() -> Result<(), BuddyError> {
             }
         };
         handle_intent(&executor, intent, &mut feedback);
+        if debug {
+            println!("Command complete");
+        }
     }
 }
 
