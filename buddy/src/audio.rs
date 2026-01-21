@@ -6,7 +6,7 @@ use cpal::{
 use std::{
     sync::{Arc, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 pub struct AudioCapturer {
@@ -15,6 +15,12 @@ pub struct AudioCapturer {
     sample_format: SampleFormat,
     channels: usize,
     sample_rate: u32,
+    silence_stop_secs: u64,
+    min_speech_secs: u64,
+    silence_threshold: i16,
+    noise_floor_secs: u64,
+    silence_floor_multiplier: f32,
+    silence_floor_offset: i16,
     debug: bool,
 }
 
@@ -118,18 +124,24 @@ impl AudioCapturer {
             sample_format,
             channels,
             sample_rate: actual_rate,
+            silence_stop_secs: cfg.silence_stop_secs,
+            min_speech_secs: cfg.min_speech_secs,
+            silence_threshold: cfg.silence_threshold,
+            noise_floor_secs: cfg.noise_floor_secs,
+            silence_floor_multiplier: cfg.silence_floor_multiplier,
+            silence_floor_offset: cfg.silence_floor_offset,
             debug,
         })
     }
 
-    pub fn capture(&self, duration: Duration) -> Result<Vec<i16>, AudioError> {
+    pub fn capture(&self, max_duration: Option<Duration>) -> Result<Vec<i16>, AudioError> {
         let mut data = match self.sample_format {
-            SampleFormat::I16 => self.capture_with_type::<i16, _>(duration, |sample| sample),
-            SampleFormat::U16 => self.capture_with_type::<u16, _>(duration, |sample| {
+            SampleFormat::I16 => self.capture_with_type::<i16, _>(max_duration, |sample| sample),
+            SampleFormat::U16 => self.capture_with_type::<u16, _>(max_duration, |sample| {
                 let centered = sample as i32 - i16::MAX as i32 - 1;
                 centered as i16
             }),
-            SampleFormat::F32 => self.capture_with_type::<f32, _>(duration, |sample| {
+            SampleFormat::F32 => self.capture_with_type::<f32, _>(max_duration, |sample| {
                 let clamped = sample.max(-1.0).min(1.0);
                 (clamped * i16::MAX as f32) as i16
             }),
@@ -166,7 +178,7 @@ impl AudioCapturer {
 
     fn capture_with_type<T, F>(
         &self,
-        duration: Duration,
+        max_duration: Option<Duration>,
         convert: F,
     ) -> Result<Vec<i16>, AudioError>
     where
@@ -208,12 +220,62 @@ impl AudioCapturer {
             .map_err(AudioError::BuildStream)?;
 
         stream.play().map_err(AudioError::PlayStream)?;
-        thread::sleep(duration);
+        let start = Instant::now();
+        let min_duration = Duration::from_secs(self.min_speech_secs);
+        let silence_duration = Duration::from_secs(self.silence_stop_secs);
+        let noise_floor_duration = Duration::from_secs(self.noise_floor_secs.max(1));
+        let poll_interval = Duration::from_millis(50);
+        let silence_threshold = self.silence_threshold.max(1);
+        let window_samples = ((self.sample_rate as f64) * poll_interval.as_secs_f64()) as usize;
+        let mut last_sound = start;
+        let mut heard_sound = false;
+        let mut noise_floor: i16 = 0;
+        loop {
+            thread::sleep(poll_interval);
+            let elapsed = start.elapsed();
+            if let Some(limit) = max_duration {
+                if elapsed >= limit {
+                    break;
+                }
+            }
+            if let Ok(buf) = buffer.lock() {
+                if !buf.is_empty() {
+                    let start_idx = buf.len().saturating_sub(window_samples.max(1));
+                    let level = window_level(&buf[start_idx..]);
+                    if elapsed <= noise_floor_duration {
+                        noise_floor = noise_floor.max(level);
+                    }
+                    let dynamic_threshold = (noise_floor as f32 * self.silence_floor_multiplier)
+                        .round() as i16
+                        + self.silence_floor_offset;
+                    let active_threshold = silence_threshold.max(dynamic_threshold);
+                    let has_sound = level >= active_threshold;
+                    if has_sound {
+                        last_sound = Instant::now();
+                        heard_sound = true;
+                    }
+                }
+            }
+            if !heard_sound && elapsed >= silence_duration && silence_duration.as_secs() > 0 {
+                break;
+            }
+            if heard_sound && elapsed >= min_duration && last_sound.elapsed() >= silence_duration {
+                break;
+            }
+        }
         drop(stream);
 
         let mut data = buffer.lock().map_err(|_| AudioError::BufferAccess)?;
         Ok(std::mem::take(&mut *data))
     }
+}
+
+fn window_level(samples: &[i16]) -> i16 {
+    if samples.is_empty() {
+        return 0;
+    }
+    let sum: i64 = samples.iter().map(|s| i64::from(s.abs())).sum();
+    (sum / samples.len() as i64).min(i16::MAX as i64) as i16
 }
 
 fn select_sample_rate(

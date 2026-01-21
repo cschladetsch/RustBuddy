@@ -1,6 +1,7 @@
 use crate::config::Config;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tokio::time::sleep;
 
 pub struct IntentClient {
     client: Client,
@@ -41,13 +42,25 @@ impl IntentClient {
             stream: false,
         };
 
-        let response = self
+        let response = match self
             .client
             .post(&self.endpoint)
             .json(&payload)
             .send()
             .await
-            .map_err(IntentError::Request)?
+        {
+            Ok(resp) => resp,
+            Err(_err) => {
+                sleep(std::time::Duration::from_secs(2)).await;
+                self.client
+                    .post(&self.endpoint)
+                    .json(&payload)
+                    .send()
+                    .await
+                    .map_err(IntentError::Request)?
+            }
+        };
+        let response = response
             .error_for_status()
             .map_err(IntentError::Http)?
             .json::<ChatResponse>()
@@ -87,7 +100,7 @@ fn build_prompt(transcription: &str, config: &Config) -> String {
     let apps = config.app_keys().join(", ");
     let systems = config.system_actions().join(", ");
     format!(
-        "You interpret voice commands for a desktop assistant.\nUser said: \"{transcription}\"\nAvailable files: {files}\nAvailable apps: {apps}\nAvailable system actions: {systems}\nRules:\n- action must be one of: open_file, open_app, system, answer, unknown\n- use open_file/open_app/system only when the request matches an available key\n- for action=answer, provide a direct response text and set target to null\n- if unsure, use action=unknown and target=null\nExamples:\nInput: \"open my resume\" => {{\"action\":\"open_file\",\"target\":\"resume\",\"response\":null,\"confidence\":0.9}}\nInput: \"start chrome\" => {{\"action\":\"open_app\",\"target\":\"chrome\",\"response\":null,\"confidence\":0.8}}\nInput: \"turn volume down\" => {{\"action\":\"system\",\"target\":\"volume_down\",\"response\":null,\"confidence\":0.8}}\nInput: \"what is 2+3\" => {{\"action\":\"answer\",\"target\":null,\"response\":\"5\",\"confidence\":0.9}}\nReturn JSON only (no markdown, no code fences) with keys action, target, response, confidence.",
+        "You interpret voice commands for a desktop assistant.\nUser said: \"{transcription}\"\nAvailable files: {files}\nAvailable apps: {apps}\nAvailable system actions: {systems}\nRules:\n- action must be one of: open_file, open_app, system, answer, unknown\n- use open_file/open_app/system only when the request matches an available key\n- for questions, facts, calculations, or definitions, use action=answer and provide a direct response\n- for action=answer, set target to null\n- if unsure, use action=unknown and target=null\nExamples:\nInput: \"open my resume\" => {{\"action\":\"open_file\",\"target\":\"resume\",\"response\":null,\"confidence\":0.9}}\nInput: \"start chrome\" => {{\"action\":\"open_app\",\"target\":\"chrome\",\"response\":null,\"confidence\":0.8}}\nInput: \"turn volume down\" => {{\"action\":\"system\",\"target\":\"volume_down\",\"response\":null,\"confidence\":0.8}}\nInput: \"what is 2+3\" => {{\"action\":\"answer\",\"target\":null,\"response\":\"5\",\"confidence\":0.9}}\nInput: \"how tall is Barack Obama\" => {{\"action\":\"answer\",\"target\":null,\"response\":\"1.87 meters (6 ft 1.5 in)\",\"confidence\":0.8}}\nReturn JSON only (no markdown, no code fences) with keys action, target, response, confidence.",
         transcription = transcription,
         files = files,
         apps = apps,

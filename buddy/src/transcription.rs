@@ -49,7 +49,7 @@ impl Transcriber {
         params.set_temperature_inc(0.0);
         params.set_no_context(true);
         params.set_single_segment(true);
-        params.set_max_tokens(16);
+        params.set_max_tokens(32);
         params.set_suppress_blank(true);
         params.set_suppress_non_speech_tokens(true);
         if let Some(prompt) = &self.initial_prompt {

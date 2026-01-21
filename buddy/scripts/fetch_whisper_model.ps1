@@ -1,5 +1,5 @@
 Param(
-    [string]$ModelName = "ggml-base.en.bin"
+    [string]$ModelName = "ggml-medium.en.bin"
 )
 
 $BaseUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"

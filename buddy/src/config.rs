@@ -8,7 +8,6 @@ use std::{
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    #[serde(default)]
     pub audio: AudioConfig,
     #[serde(default)]
     pub hotkey: HotkeyConfig,
@@ -32,10 +31,14 @@ pub struct Config {
 pub struct AudioConfig {
     #[allow(dead_code)]
     pub device_name: Option<String>,
-    #[serde(default = "AudioConfig::default_capture_duration_secs")]
     pub capture_duration_secs: u64,
+    pub silence_stop_secs: u64,
+    pub min_speech_secs: u64,
+    pub silence_threshold: i16,
+    pub noise_floor_secs: u64,
+    pub silence_floor_multiplier: f32,
+    pub silence_floor_offset: i16,
     #[allow(dead_code)]
-    #[serde(default = "AudioConfig::default_sample_rate")]
     pub sample_rate: u32,
 }
 
@@ -141,42 +144,6 @@ impl Config {
     }
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            audio: AudioConfig::default(),
-            hotkey: HotkeyConfig::default(),
-            feedback: FeedbackConfig::default(),
-            deepseek: DeepSeekConfig::default(),
-            transcription: TranscriptionConfig::default(),
-            files: HashMap::new(),
-            applications: HashMap::new(),
-            system: SystemConfig::default(),
-            logging: LoggingConfig::default(),
-        }
-    }
-}
-
-impl Default for AudioConfig {
-    fn default() -> Self {
-        Self {
-            device_name: None,
-            capture_duration_secs: Self::default_capture_duration_secs(),
-            sample_rate: Self::default_sample_rate(),
-        }
-    }
-}
-
-impl AudioConfig {
-    const fn default_capture_duration_secs() -> u64 {
-        3
-    }
-
-    const fn default_sample_rate() -> u32 {
-        16_000
-    }
-}
-
 impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
@@ -244,7 +211,7 @@ impl Default for TranscriptionConfig {
 
 impl TranscriptionConfig {
     fn default_model_path() -> PathBuf {
-        PathBuf::from("models/ggml-base.en.bin")
+        PathBuf::from("models/ggml-medium.en.bin")
     }
 }
 

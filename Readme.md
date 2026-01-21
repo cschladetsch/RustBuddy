@@ -98,8 +98,20 @@ one it falls back to `config.toml` in the current working directory (keep it nex
 [audio]
 # Optional microphone name, defaults to system input
 # device_name = "Blue Yeti"
-# How long Buddy records audio (seconds)
-capture_duration_secs = 3
+# How long Buddy records audio (seconds). Set to 0 to record until silence.
+capture_duration_secs = 0
+# Stop early if silence persists this long (seconds)
+silence_stop_secs = 4
+# Minimum speech time before silence can end recording (seconds)
+min_speech_secs = 3
+# Average signal level below this is treated as silence
+silence_threshold = 200
+# Initial noise floor sampling window (seconds)
+noise_floor_secs = 1
+# Multiplier applied to noise floor when determining silence
+silence_floor_multiplier = 2.0
+# Additional offset added to the dynamic silence threshold
+silence_floor_offset = 50
 sample_rate = 16000
 
 [hotkey]
@@ -121,10 +133,10 @@ timeout_secs = 60
 
 [transcription]
 # Path to a Whisper model (download via scripts/fetch_whisper_model.sh)
-model_path = "models/ggml-base.en.bin"
+model_path = "models/ggml-medium.en.bin"
 # Force a language (remove to auto-detect)
 language = "en"
-# threads = 4
+# threads = 8
 
 # File mappings - "open X" commands
 [files]

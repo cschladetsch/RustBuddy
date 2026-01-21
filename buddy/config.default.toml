@@ -18,9 +18,11 @@ silence_floor_offset = 50
 sample_rate = 16000
 
 [hotkey]
+# Trigger combination to start listening
 key = "ctrl+alt+b"
 
 [feedback]
+# Audio feedback mode: "sound", "tts", or "both"
 mode = "tts"
 success_sound = "assets/success.wav"
 error_sound = "assets/error.wav"
@@ -32,9 +34,7 @@ model = "deepseek-r1:latest"
 timeout_secs = 60
 
 [transcription]
-# Path to a Whisper model (download via scripts/fetch_whisper_model.ps1)
 model_path = "models/ggml-medium.en.bin"
-# Force a language (remove to let Whisper auto-detect)
 language = "en"
 # threads = 8
 

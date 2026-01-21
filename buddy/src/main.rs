@@ -13,7 +13,7 @@ use executor::{CommandExecutor, ExecutionResult};
 use feedback::FeedbackPlayer;
 use hotkey::{HotkeyError, HotkeyListener};
 use intent::{Intent, IntentClient, IntentError};
-use std::{sync::Arc, time::Duration};
+use std::{path::Path, path::PathBuf, sync::Arc, time::Duration};
 use transcription::Transcriber;
 
 #[tokio::main]
@@ -61,10 +61,20 @@ async fn run() -> Result<(), BuddyError> {
         Ok(cfg) => cfg,
         Err(err) => {
             eprintln!(
-                "Failed to load config '{}': {}. Falling back to defaults.",
+                "Failed to load config '{}': {}. Trying default config.",
                 config_path, err
             );
-            Config::default()
+            let fallback_path = Path::new(&config_path)
+                .parent()
+                .map(|dir| dir.join("config.default.toml"))
+                .unwrap_or_else(|| PathBuf::from("config.default.toml"));
+            match Config::load(&fallback_path) {
+                Ok(cfg) => {
+                    println!("Loaded default config from '{}'", fallback_path.display());
+                    cfg
+                }
+                Err(fallback_err) => return Err(BuddyError::Config(fallback_err)),
+            }
         }
     };
     let debug = debug_override.unwrap_or(config.logging.debug);
@@ -125,9 +135,13 @@ async fn run() -> Result<(), BuddyError> {
         }
         println!("Recording audio...");
         let capturer_clone = Arc::clone(&capturer);
-        let capture_duration = Duration::from_secs(config.audio.capture_duration_secs);
+        let max_duration = if config.audio.capture_duration_secs == 0 {
+            None
+        } else {
+            Some(Duration::from_secs(config.audio.capture_duration_secs))
+        };
         let audio_buffer =
-            tokio::task::spawn_blocking(move || capturer_clone.capture(capture_duration)).await??;
+            tokio::task::spawn_blocking(move || capturer_clone.capture(max_duration)).await??;
 
         println!("Transcribing...");
         let transcript = transcriber.transcribe(&audio_buffer)?;
@@ -251,6 +265,7 @@ fn handle_intent(
                 feedback.success();
             }
             ExecutionResult::Answer(response) => {
+                println!("Speaking response...");
                 println!("Answer: {} (confidence {:.2})", response, confidence);
                 feedback.say(&response);
             }
@@ -268,6 +283,7 @@ fn handle_intent(
 
 #[derive(Debug)]
 enum BuddyError {
+    Config(config::ConfigError),
     Audio(audio::AudioError),
     Transcription(transcription::TranscriptionError),
     Intent(IntentError),
@@ -278,6 +294,7 @@ enum BuddyError {
 impl std::fmt::Display for BuddyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Config(err) => write!(f, "config error: {}", err),
             Self::Audio(err) => write!(f, "audio error: {}", err),
             Self::Transcription(err) => write!(f, "transcription error: {}", err),
             Self::Intent(err) => write!(f, "intent error: {}", err),
@@ -290,6 +307,7 @@ impl std::fmt::Display for BuddyError {
 impl std::error::Error for BuddyError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Config(err) => Some(err),
             Self::Audio(err) => Some(err),
             Self::Transcription(err) => Some(err),
             Self::Intent(err) => Some(err),
@@ -302,6 +320,12 @@ impl std::error::Error for BuddyError {
 impl From<audio::AudioError> for BuddyError {
     fn from(err: audio::AudioError) -> Self {
         Self::Audio(err)
+    }
+}
+
+impl From<config::ConfigError> for BuddyError {
+    fn from(err: config::ConfigError) -> Self {
+        Self::Config(err)
     }
 }
 

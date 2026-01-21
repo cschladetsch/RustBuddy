@@ -38,13 +38,13 @@ impl FeedbackPlayer {
                 }
             }
             FeedbackMode::Tts => {
-                self.speak("Ok");
+                self.speak("Ok", false);
             }
             FeedbackMode::Both => {
                 if let Some(path) = self.success_sound.clone() {
                     play_sound(Path::new(&path));
                 }
-                self.speak("Ok");
+                self.speak("Ok", false);
             }
         }
     }
@@ -52,7 +52,7 @@ impl FeedbackPlayer {
     pub fn say(&mut self, message: &str) {
         match self.mode {
             FeedbackMode::Sound => {}
-            FeedbackMode::Tts | FeedbackMode::Both => self.speak(message),
+            FeedbackMode::Tts | FeedbackMode::Both => self.speak(message, true),
         }
     }
 
@@ -63,27 +63,35 @@ impl FeedbackPlayer {
                     play_sound(Path::new(&path));
                 }
             }
-            FeedbackMode::Tts => self.speak(message),
+            FeedbackMode::Tts => self.speak(message, true),
             FeedbackMode::Both => {
                 if let Some(path) = self.error_sound.clone() {
                     play_sound(Path::new(&path));
                 }
-                self.speak(message);
+                self.speak(message, true);
             }
         }
     }
 
-    fn speak(&mut self, text: &str) {
+    fn speak(&mut self, text: &str, interrupt: bool) {
         #[cfg(windows)]
         {
-            if let Some(tts) = self.tts.as_mut() {
-                let _ = tts.speak(text, false);
+            match self.tts.as_mut() {
+                Some(tts) => {
+                    if interrupt {
+                        let _ = tts.stop();
+                    }
+                    if let Err(err) = tts.speak(text, interrupt) {
+                        eprintln!("TTS speak failed: {}", err);
+                    }
+                }
+                None => eprintln!("TTS init failed; no voice output"),
             }
         }
 
         #[cfg(not(windows))]
         {
-            let _ = text;
+            let _ = (text, interrupt);
         }
     }
 }

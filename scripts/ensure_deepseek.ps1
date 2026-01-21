@@ -180,10 +180,7 @@ function Ensure-Model {
 if (Test-DeepSeek) {
     $model = Get-DeepSeekModel
     if (Ensure-Model -Model $model) {
-        if (Warm-Model -Model $model) {
-            exit 0
-        }
-        exit 1
+        exit 0
     }
     Write-Host "DeepSeek model '$model' not available."
     exit 1
@@ -205,10 +202,7 @@ for ($i = 0; $i -lt 120; $i++) {
     if (Test-DeepSeek) {
         $model = Get-DeepSeekModel
         if (Ensure-Model -Model $model) {
-            if (Warm-Model -Model $model) {
-                exit 0
-            }
-            exit 1
+            exit 0
         }
         Write-Host "DeepSeek model '$model' not available."
         exit 1
