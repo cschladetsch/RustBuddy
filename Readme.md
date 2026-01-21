@@ -8,7 +8,7 @@ A local, privacy-first voice assistant for Windows. Control your PC with natural
 
 **Current Version:** 0.1.0-alpha (MVP)  
 **Target:** Windows 10/11 (native binary)  
-**Development:** WSL2 + cross-compilation
+**Development:** Windows PowerShell (native build)
 
 ## Features
 
@@ -19,19 +19,15 @@ A local, privacy-first voice assistant for Windows. Control your PC with natural
 - 🔊 **Audio Feedback** - Simple confirmation sounds or TTS responses
 - ⚡ **Hotkey Activated** - Press key combo, speak command, done (wake word coming in v0.2)
 
-## Quick Start
+## Quick Start (Windows)
 
-```bash
-# In WSL2 after cloning this repo
-cd buddy
-rustup target add x86_64-pc-windows-gnu
-cargo build --target x86_64-pc-windows-gnu --release
-
-# Run on Windows (copy the .exe somewhere convenient first)
-./target/x86_64-pc-windows-gnu/release/buddy.exe
+```powershell
+# From repo root
+.\r.bat --debug
 ```
 
-Press configured hotkey (default: `Ctrl+Alt+B`), speak your command, wait for confirmation.
+`r.bat` builds Buddy, ensures the DeepSeek model is present, and downloads the Whisper model if needed.
+Press the hotkey (default: `Ctrl+Alt+B`), speak your command, wait for confirmation.
 
 ## Example Commands
 
@@ -43,6 +39,8 @@ Press configured hotkey (default: `Ctrl+Alt+B`), speak your command, wait for co
 "Mute the audio"           → Runs `volume_mute`
 "Go to sleep"              → Puts the PC to sleep
 "Lock the computer"        → Locks the current session
+"What is 2+3"              → Answers with "5"
+"What's the capital of France" → Answers with "Paris"
 ```
 
 ## Architecture
@@ -92,7 +90,8 @@ sequenceDiagram
 
 Buddy looks for a config file path passed as the first argument. If you don’t provide
 one it falls back to `config.toml` in the current working directory (keep it next to
-`buddy.exe` for the easiest setup). Start from `buddy/config.example.toml`.
+`buddy.exe` for the easiest setup). If `config.toml` is missing, it will try
+`config.default.toml`. Start from `buddy/config.example.toml`.
 
 ```toml
 [audio]
@@ -179,32 +178,19 @@ lock = true
 
 ## Setup Instructions
 
-### 1. Install Rust and Targets
+### 1. Install Rust
 
-```bash
-# In WSL2
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-rustup target add x86_64-pc-windows-gnu
-
-# Install MinGW cross-compiler
-sudo apt update
-sudo apt install -y mingw-w64
-```
+Install Rust for Windows from https://rustup.rs and restart your terminal.
 
 ### 2. Download a Whisper Model
 
-```powershell
-# From repo root
-cd buddy
-
-# Download the default base English model (~140MB)
-scripts/fetch_whisper_model.ps1 ggml-base.en.bin
-```
+`r.bat` will download the Whisper model automatically using
+`buddy/scripts/fetch_whisper_model.ps1` when it is missing.
 
 ### 2b. (Optional) CUDA Acceleration
 
 If you have an NVIDIA GPU and the CUDA Toolkit installed, you can enable GPU
-acceleration for Whisper:
+acceleration for Whisper.
 
 - Install the CUDA Toolkit and ensure `CUDA_PATH` is set (e.g., `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.4`).
 - Build with the CUDA feature:
@@ -212,7 +198,7 @@ acceleration for Whisper:
 ```powershell
 # From repo root
 set BUDDY_CUDA=1
-.\b.bat
+.\r.bat
 ```
 
 Or directly:
@@ -220,6 +206,11 @@ Or directly:
 ```powershell
 cargo build --release --features cuda
 ```
+
+Notes:
+- CUDA 13+ drops support for older compute capabilities. If you see errors about
+  `compute_52`, either install CUDA 12.x or set the target explicitly:
+  `set BUDDY_CUDA_ARCH=75` (RTX 2070 = 7.5).
 
 ### 3. Setup DeepSeek Local
 
@@ -240,12 +231,8 @@ Copy `buddy/config.example.toml` to `config.toml` and edit paths on Windows (Not
 
 ### 5. Build and Run
 
-From PowerShell (with MinGW and Whisper model ready):
-
 ```powershell
-cd buddy
-scripts/build_windows.ps1
-& ..\target\x86_64-pc-windows-gnu\release\buddy.exe
+.\r.bat --debug
 ```
 
 ## Usage
