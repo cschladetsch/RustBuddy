@@ -201,6 +201,26 @@ cd buddy
 scripts/fetch_whisper_model.ps1 ggml-base.en.bin
 ```
 
+### 2b. (Optional) CUDA Acceleration
+
+If you have an NVIDIA GPU and the CUDA Toolkit installed, you can enable GPU
+acceleration for Whisper:
+
+- Install the CUDA Toolkit and ensure `CUDA_PATH` is set (e.g., `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.4`).
+- Build with the CUDA feature:
+
+```powershell
+# From repo root
+set BUDDY_CUDA=1
+.\b.bat
+```
+
+Or directly:
+
+```powershell
+cargo build --release --features cuda
+```
+
 ### 3. Setup DeepSeek Local
 
 ```bash

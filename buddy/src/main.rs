@@ -13,7 +13,11 @@ use executor::{CommandExecutor, ExecutionResult};
 use feedback::FeedbackPlayer;
 use hotkey::{HotkeyError, HotkeyListener};
 use intent::{Intent, IntentClient, IntentError};
-use std::{path::Path, path::PathBuf, sync::Arc, time::Duration};
+use std::{path::Path, path::PathBuf, sync::Arc, time::Duration, time::Instant};
+#[cfg(windows)]
+use windows::Win32::System::LibraryLoader::{GetModuleHandleW, LoadLibraryW};
+#[cfg(windows)]
+use windows::Win32::Foundation::HINSTANCE;
 use transcription::Transcriber;
 
 #[tokio::main]
@@ -92,6 +96,29 @@ async fn run() -> Result<(), BuddyError> {
                 eprintln!("Warning: resume path does not exist");
             }
         }
+        println!(
+            "Whisper CUDA feature enabled: {}",
+            colorize(
+                if cfg!(feature = "cuda") { "yes" } else { "no" },
+                if cfg!(feature = "cuda") {
+                    Color::Green
+                } else {
+                    Color::Yellow
+                }
+            )
+        );
+        if let Ok(cuda_path) = std::env::var("CUDA_PATH") {
+            println!("CUDA_PATH: {}", cuda_path);
+        }
+        #[cfg(windows)]
+        if cfg!(feature = "cuda") {
+            if !check_cublas_loaded() {
+                eprintln!("{}", colorize(
+                    "CUDA enabled but cublas64_*.dll was not loadable. Check CUDA_PATH/bin on PATH.",
+                    Color::Red
+                ));
+            }
+        }
     }
 
     let intent_client = IntentClient::new(&config);
@@ -115,7 +142,14 @@ async fn run() -> Result<(), BuddyError> {
 
     let capturer = Arc::new(AudioCapturer::new(&config.audio, debug)?);
     let initial_prompt = build_transcription_prompt(&config);
-    let transcriber = Arc::new(Transcriber::new(&config.transcription, initial_prompt)?);
+    let transcriber = Arc::new(Transcriber::new(
+        &config.transcription,
+        initial_prompt,
+        debug,
+    )?);
+    if debug {
+        println!("Whisper system info: {}", whisper_rs::print_system_info());
+    }
     let executor = CommandExecutor::new(&config);
     let mut feedback = FeedbackPlayer::new(&config.feedback);
     let mut hotkey = HotkeyListener::new(&config.hotkey)?;
@@ -133,6 +167,7 @@ async fn run() -> Result<(), BuddyError> {
         if debug {
             println!("Hotkey received");
         }
+        let total_start = Instant::now();
         println!("Recording audio...");
         let capturer_clone = Arc::clone(&capturer);
         let max_duration = if config.audio.capture_duration_secs == 0 {
@@ -140,11 +175,15 @@ async fn run() -> Result<(), BuddyError> {
         } else {
             Some(Duration::from_secs(config.audio.capture_duration_secs))
         };
+        let capture_start = Instant::now();
         let audio_buffer =
             tokio::task::spawn_blocking(move || capturer_clone.capture(max_duration)).await??;
+        let capture_elapsed = capture_start.elapsed();
 
         println!("Transcribing...");
+        let transcribe_start = Instant::now();
         let transcript = transcriber.transcribe(&audio_buffer)?;
+        let transcribe_elapsed = transcribe_start.elapsed();
         if transcript.trim().is_empty() {
             eprintln!("No speech detected");
             feedback.error("I didn't hear anything");
@@ -161,6 +200,7 @@ async fn run() -> Result<(), BuddyError> {
             continue;
         }
 
+        let intent_start = Instant::now();
         let intent = match intent_client.infer_intent(&transcript, &config).await {
             Ok(intent) => intent,
             Err(err) => {
@@ -169,11 +209,77 @@ async fn run() -> Result<(), BuddyError> {
                 continue;
             }
         };
+        let intent_elapsed = intent_start.elapsed();
+        let execute_start = Instant::now();
         handle_intent(&executor, intent, &mut feedback);
+        let execute_elapsed = execute_start.elapsed();
+        if debug {
+            let total_elapsed = total_start.elapsed();
+            println!(
+                "{}",
+                colorize(
+                    &format!(
+                        "Timings: capture={:.2}s transcribe={:.2}s intent={:.2}s execute={:.2}s total={:.2}s",
+                        capture_elapsed.as_secs_f64(),
+                        transcribe_elapsed.as_secs_f64(),
+                        intent_elapsed.as_secs_f64(),
+                        execute_elapsed.as_secs_f64(),
+                        total_elapsed.as_secs_f64()
+                    ),
+                    Color::Cyan
+                )
+            );
+        }
         if debug {
             println!("Command complete");
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum Color {
+    Red,
+    Green,
+    Yellow,
+    Cyan,
+}
+
+fn colorize(text: &str, color: Color) -> String {
+    if std::env::var_os("NO_COLOR").is_some() {
+        return text.to_string();
+    }
+    let code = match color {
+        Color::Red => "31",
+        Color::Green => "32",
+        Color::Yellow => "33",
+        Color::Cyan => "36",
+    };
+    format!("\x1b[{}m{}\x1b[0m", code, text)
+}
+
+#[cfg(windows)]
+fn check_cublas_loaded() -> bool {
+    let candidates = ["cublas64_13.dll", "cublas64_12.dll", "cublas64_11.dll"];
+    for name in candidates {
+        if load_library(name).is_some() {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(windows)]
+fn load_library(name: &str) -> Option<HINSTANCE> {
+    let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        if let Ok(handle) = GetModuleHandleW(windows::core::PCWSTR(wide.as_ptr())) {
+            return Some(handle.into());
+        }
+        if let Ok(loaded) = LoadLibraryW(windows::core::PCWSTR(wide.as_ptr())) {
+            return Some(loaded.into());
+        }
+    }
+    None
 }
 
 async fn wait_for_intent_ready(intent_client: &IntentClient) -> Result<(), IntentError> {

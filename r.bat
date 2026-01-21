@@ -1,5 +1,9 @@
 @echo off
 setlocal
+if not defined BUDDY_CUDA set "BUDDY_CUDA=1"
+if defined CUDA_PATH (
+  if exist "%CUDA_PATH%\bin" set "PATH=%CUDA_PATH%\bin;%PATH%"
+)
 call "%~dp0\b.bat"
 if errorlevel 1 exit /b %ERRORLEVEL%
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0\scripts\ensure_deepseek.ps1" -ConfigPath "%~dp0\buddy\config.toml"

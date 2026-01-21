@@ -26,3 +26,4 @@ target
 models/
 buddy/config.toml
 buddy/scripts/*.sh
+crates/

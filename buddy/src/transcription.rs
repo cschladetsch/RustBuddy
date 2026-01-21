@@ -13,9 +13,16 @@ impl Transcriber {
     pub fn new(
         cfg: &TranscriptionConfig,
         initial_prompt: Option<String>,
+        debug: bool,
     ) -> Result<Self, TranscriptionError> {
         let model_path = resolve_path(&cfg.model_path);
-        let ctx = WhisperContext::new_with_params(&model_path, WhisperContextParameters::default())
+        let mut ctx_params = WhisperContextParameters::new();
+        let use_gpu = cfg!(feature = "cuda");
+        ctx_params.use_gpu(use_gpu);
+        if debug {
+            println!("Whisper context use_gpu: {}", use_gpu);
+        }
+        let ctx = WhisperContext::new_with_params(&model_path, ctx_params)
             .map_err(|err| TranscriptionError::Model(err.to_string()))?;
         let threads = cfg
             .threads
